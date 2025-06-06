@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Ancestry Estimator</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="text-center mt-5">
+            <h1>Ancestry Estimation from VCF File</h1>
+            <p class="lead">Upload your VCF file to discover your potential ancestry distribution.</p>
+        </header>
+
+        <section id="upload-section" class="mt-4">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ 'info flash-message' if category == 'info' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                    </button>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <form method="post" enctype="multipart/form-data" id="upload-form" class="shadow p-4 rounded">
+                <div class="form-group">
+                    <label for="vcf_file">Select your VCF File (.vcf or .vcf.gz):</label>
+                    <div class="custom-file">
+                        <input type="file" class="custom-file-input" id="vcf_file" name="vcf_file" accept=".vcf,.vcf.gz" required>
+                        <label class="custom-file-label" for="vcf_file" data-browse="Browse">Choose file...</label>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Estimate</button>
+            </form>
+            <div id="loading-indicator" style="display:none;" class="text-center mt-3">
+                <p>Processing, please wait... <br>This may take several minutes depending on the file size.</p>
+                <div class="spinner-border text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+        </section>
+
+        <footer class="text-center mt-5 mb-3">
+            <p class="text-muted">&copy; 2024-2025 Ancestry Estimator</p>
+        </footer>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        $('.custom-file-input').on('change', function() {
+           let fileName = $(this).val().split('\\').pop();
+           $(this).next('.custom-file-label').addClass("selected").html(fileName || "Choose file...");
+        });
+
+        document.getElementById('upload-form').addEventListener('submit', function() {
+            // Check if a file is selected
+            if (document.getElementById('vcf_file').files.length > 0) {
+                document.getElementById('loading-indicator').style.display = 'block';
+                const submitButton = this.querySelector('button[type="submit"]');
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+            }
+        });
+    </script>
+</body>
+</html>

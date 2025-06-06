@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment
+.venv/
+venv/
+venv.bak/
+
+# IDE / Editor
+.idea/
+*.swp
+*.swo
+
+# Temporary App Folders
+uploads/
+results_app/
+
+# OS
+.DS_Store
+Thumbs.db
