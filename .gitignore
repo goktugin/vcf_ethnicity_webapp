@@ -1,0 +1,11 @@
+# Python Sanal Ortam Klasörü
+venv/
+.idea/
+__pycache__/
+
+# İşletim Sistemi Dosyaları
+.DS_Store
+
+# Log ve Veri Dosyaları
+*.log
+*.dat
