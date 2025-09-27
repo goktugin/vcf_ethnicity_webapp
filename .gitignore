@@ -1,7 +1,10 @@
 # Python Sanal Ortam Klasörü
 venv/
+kullanıcı vcf/
 .idea/
 __pycache__/
+uploads/
+**/filtrelenmis_genotip_TUM_KROMOZOM_top7000_snps
 
 # İşletim Sistemi Dosyaları
 .DS_Store
