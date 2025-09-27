@@ -1,10 +1,25 @@
 # Python Sanal Ortam Klasörü
 venv/
-kullanıcı vcf/
 .idea/
 __pycache__/
+
+#Kullanıcı yükleme klasörü
 uploads/
 **/filtrelenmis_genotip_TUM_KROMOZOM_top7000_snps
+
+# Kullanıcı VCF/Büyük Veri Dosyaları
+kullanıcı vcf/
+kullan\304\261c\304\261 vcf/
+
+# Büyük Makine Öğrenimi Model ve Veri Dosyaları
+source/filtrelenmis_genotip_TUM_KROMOZOM_top7000_snps.csv
+source/machine_learning/*.joblib
+source/machine_learning/*.pkl
+source/machine_learning/pcas.joblib
+source/machine_learning/scalers.joblib
+
+# Diğer VCF ve GZ Dosyaları
+*.vcf.gz
 
 # İşletim Sistemi Dosyaları
 .DS_Store
