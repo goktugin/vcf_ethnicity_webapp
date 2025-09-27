@@ -19,7 +19,7 @@
             {% if results and not results.error_message %}
                 <div class="row">
                     <div class="col-md-6">
-                        <h3>Estimated Ancestry Distribution</h3>
+                        <h3>Estimated Ancestry Breakdown</h3>
                         {% if results.display_predictions %}
                             <table class="table table-hover table-sm">
                                 <thead class="thead-light">
@@ -40,60 +40,50 @@
                             {% if results.dominant_ancestry and results.dominant_ancestry != "N/A" %}
                                 <div class="mt-3 alert alert-info">
                                     <strong>Dominant Ancestry:</strong> {{ results.dominant_ancestry }}
-                                    {% if results.dominant_percentage_str and results.dominant_percentage_str != "N/A" %}
-                                        ({{ results.dominant_percentage_str }})
-                                    {% endif %}
+                                    ({{ results.dominant_percentage_str }})
                                 </div>
                             {% endif %}
-                        {% else %}
-                            <p class="text-muted">No detailed predictions to display.</p>
                         {% endif %}
                     </div>
                     <div class="col-md-6">
-                        <h3>Visual Distribution</h3>
+                        <h3>Visual Breakdown</h3>
                         <div class="chart-container">
                             <canvas id="ethnicityPieChart"></canvas>
                         </div>
                     </div>
                 </div>
-            {% elif results.error_message %}
+            {% else %}
                 <div class="alert alert-danger" role="alert">
                     <h4>An Error Occurred!</h4>
-                    <p>{{ results.error_message }}</p>
-                    <p>Please return to the main page and try again, or check your file.</p>
-                </div>
-            {% else %}
-                 <div class="alert alert-warning" role="alert">
-                    Could not load results or an issue occurred.
+                    <p>{{ results.error_message or "Results could not be displayed." }}</p>
+                    <p>Please return to the homepage and try again.</p>
                 </div>
             {% endif %}
 
             <div class="text-center mt-4">
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">New Estimation</a>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">Make a New Prediction</a>
             </div>
         </section>
 
         <footer class="text-center mt-5 mb-3">
-            <p class="text-muted">&copy; 2024-2025 Ancestry Estimator</p>
+            <p class="text-muted">&copy; 2024-2025 Ancestry Predictor</p>
         </footer>
     </div>
 
     {% if results and not results.error_message and results.labels and results.percentages %}
     <script>
         const ctx = document.getElementById('ethnicityPieChart').getContext('2d');
-
         const professionalColors = [
             '#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#212529',
             '#0b5ed7', '#5c636a', '#157347', '#bb2d3b', '#eea200', '#0aa3c2',
-            '#4d8bf9', '#868e96', '#48a474'
+            '#4d8bf9', '#868e96', '#48a474', '#6f42c1', '#d63384', '#fd7e14',
+            '#20c997', '#6610f2', '#ff69b4', '#17a2b8', '#ffc107', '#28a745', '#dc3545', '#343a40'
         ];
-
         const chartColors = professionalColors.slice(0, {{ results.labels|length }});
-
         const ethnicityData = {
             labels: {{ results.labels|tojson }},
             datasets: [{
-                label: 'Ancestry Distribution',
+                label: 'Ancestry Breakdown', // <-- DEĞİŞİKLİK
                 data: {{ results.percentages|tojson }},
                 backgroundColor: chartColors,
                 borderColor: '#ffffff',
@@ -101,34 +91,25 @@
                 hoverOffset: 4
             }]
         };
-
         const config = {
             type: 'pie',
             data: ethnicityData,
             options: {
-                responsive: true,
-                maintainAspectRatio: true,
                 plugins: {
                     legend: {
                         position: 'bottom',
+                        align: 'start',
                         labels: {
                             padding: 15,
-                            font: {
-                                family: 'Times New Roman',
-                                size: 12
-                            }
+                            font: { family: 'Times New Roman' }
                         }
                     },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
                                 let label = context.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed !== null) {
-                                    label += context.parsed.toFixed(2) + '%';
-                                }
+                                if (label) { label += ': '; }
+                                if (context.parsed !== null) { label += context.parsed.toFixed(2) + '%'; }
                                 return label;
                             }
                         }
@@ -139,8 +120,5 @@
         const ethnicityPieChart = new Chart(ctx, config);
     </script>
     {% endif %}
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>

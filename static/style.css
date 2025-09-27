@@ -1,8 +1,8 @@
-/* Profesyonel ve Sade Tema */
+/* Profesyonel ve Sade Tema - Tüm Metinler Siyah */
 body {
     font-family: 'Times New Roman', Times, serif;
     background-color: #f8f9fa; /* Çok açık gri arkaplan */
-    color: #212529; /* Koyu gri (neredeyse siyah) metin */
+    color: #000000; /* Varsayılan metin rengi SİYAH */
     line-height: 1.7;
 }
 
@@ -18,18 +18,18 @@ body {
 }
 
 header h1 {
-    color: #004085; /* Koyu lacivert başlık */
+    color: #000000; /* Metin rengi SİYAH */
     font-weight: bold;
 }
 
 header .lead {
-    color: #6c757d; /* Nötr gri alt başlık */
+    color: #000000; /* Metin rengi SİYAH */
     font-size: 1.15em;
 }
 
 /* Form Stilleri */
 #upload-form {
-    background-color: transparent; /* Arkaplanı şeffaf yap */
+    background-color: transparent;
     border: none;
     box-shadow: none;
     padding: 0;
@@ -37,11 +37,12 @@ header .lead {
 
 .custom-file-label {
     border-color: #ced4da;
+    color: #000000; /* Metin rengi SİYAH */
 }
 
 .custom-file-label::after {
     background-color: #6c757d; /* Gri "Gözat" butonu */
-    color: white;
+    color: white; /* Not: Bu butonun içindeki yazı okunabilirlik için beyaz bırakıldı, siyah yapılırsa okunmaz. */
 }
 
 .btn-primary {
@@ -50,6 +51,7 @@ header .lead {
     font-weight: bold;
     padding: 10px 20px;
     letter-spacing: 0.5px;
+    /* Not: Mavi buton üzerinde siyah yazı okunmayacağı için varsayılan beyaz renk bırakıldı. */
 }
 
 .btn-primary:hover {
@@ -60,6 +62,7 @@ header .lead {
 .btn-secondary {
     background-color: #6c757d; /* İkincil buton için standart gri */
     border-color: #5a6268;
+    /* Not: Gri buton üzerinde siyah yazı okunmayacağı için varsayılan beyaz renk bırakıldı. */
 }
 
 .btn-secondary:hover {
@@ -72,13 +75,13 @@ header .lead {
     color: #0056b3; /* Spinner rengi */
 }
 #loading-indicator p {
-    color: #6c757d;
+    color: #000000; /* Metin rengi SİYAH */
 }
 
 
 /* Sonuç Sayfası Stilleri */
 #results-section h3 {
-    color: #004085; /* Koyu lacivert alt başlık */
+    color: #000000; /* Metin rengi SİYAH */
     margin-bottom: 15px;
     border-bottom: 1px solid #dee2e6; /* İnce alt çizgi */
     padding-bottom: 10px;
@@ -86,10 +89,15 @@ header .lead {
 
 .table thead.thead-light th {
     background-color: #e9ecef; /* Tablo başlığı için açık gri */
-    color: #212529;
+    color: #000000; /* Metin rengi SİYAH */
     border-bottom-width: 2px;
     border-color: #dee2e6;
     font-weight: bold;
+}
+
+/* Tablo içeriğinin rengini de siyah yapıyoruz */
+.table {
+    color: #000000;
 }
 
 .table-hover tbody tr:hover {
@@ -99,7 +107,7 @@ header .lead {
 /* Bilgi Mesajı (Baskın Soy) */
 .alert-info {
     background-color: #cfe2ff; /* Açık mavi */
-    color: #084298;
+    color: #000000; /* Metin rengi SİYAH */
     border-color: #b6d4fe;
 }
 
@@ -115,17 +123,17 @@ header .lead {
 }
 .alert-danger {
     background-color: #f8d7da;
-    color: #721c24;
+    color: #000000; /* Metin rengi SİYAH */
     border-color: #f5c6cb;
 }
 .alert-warning {
     background-color: #fff3cd;
-    color: #856404;
+    color: #000000; /* Metin rengi SİYAH */
     border-color: #ffeeba;
 }
-.alert-info.flash-message { /* Sadece flash mesajları için farklı bir mavi */
+.alert-info.flash-message {
     background-color: #cff4fc;
-    color: #055160;
+    color: #000000; /* Metin rengi SİYAH */
     border-color: #b6effb;
 }
 
@@ -135,5 +143,5 @@ footer {
     margin-top: 20px;
     border-top: 1px solid #dee2e6;
     font-size: 0.9em;
-    color: #6c757d;
+    color: #000000; /* Metin rengi SİYAH */
 }

@@ -1,76 +1,47 @@
+import os
 import gzip
 from collections import defaultdict
-import shutil
 import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-import os
 import joblib
 import warnings
+import shutil
 import uuid
 import logging
 from flask import Flask, render_template, request, redirect, url_for, flash
 
-# --- POPÜLASYON KODU ÇEVİRİ SÖZLÜĞÜ ---
-# 1000 Genomes Projesi'ndeki popülasyon kodları ve tam adları
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
+
 POPULATION_MAP = {
-    'pop_ACB': 'African Caribbean in Barbados',
-    'pop_ASW': 'Americans of African Ancestry in SW USA',
-    'pop_BEB': 'Bengali from Bangladesh',
-    'pop_CDX': 'Chinese Dai in Xishuangbanna, China',
-    'pop_CEU': 'Utah Residents (CEPH) with Northern and Western European Ancestry',
-    'pop_CHB': 'Han Chinese in Beijing, China',
-    'pop_CHS': 'Southern Han Chinese',
-    'pop_CLM': 'Colombians from Medellin, Colombia',
-    'pop_ESN': 'Esan in Nigeria',
-    'pop_FIN': 'Finnish in Finland',
-    'pop_GBR': 'British in England and Scotland',
-    'pop_GIH': 'Gujarati Indian from Houston, Texas',
-    'pop_GWD': 'Gambian in Western Divisions in the Gambia',
-    'pop_IBS': 'Iberian Population in Spain',
-    'pop_ITU': 'Indian Telugu from the UK',
-    'pop_JPT': 'Japanese in Tokyo, Japan',
-    'pop_KHV': 'Kinh in Ho Chi Minh City, Vietnam',
-    'pop_LWK': 'Luhya in Webuye, Kenya',
-    'pop_MSL': 'Mende in Sierra Leone',
-    'pop_MXL': 'Mexican Ancestry from Los Angeles, USA',
-    'pop_PEL': 'Peruvians from Lima, Peru',
-    'pop_PJL': 'Punjabi from Lahore, Pakistan',
-    'pop_PUR': 'Puerto Ricans from Puerto Rico',
-    'pop_STU': 'Sri Lankan Tamil from the UK',
-    'pop_TSI': 'Toscani in Italia',
-    'pop_YRI': 'Yoruba in Ibadan, Nigeria',
+    'ACB': 'African Caribbean in Barbados', 'ASW': 'Americans of African Ancestry in SW USA',
+    'BEB': 'Bengali in Bangladesh',
+    'CDX': 'Chinese Dai in Xishuangbanna, China',
+    'CEU': 'Utah Residents (CEPH) with Northern and Western European Ancestry',
+    'CHB': 'Han Chinese in Beijing, China', 'CHS': 'Southern Han Chinese', 'CLM': 'Colombians from Medellin, Colombia',
+    'ESN': 'Esan in Nigeria', 'FIN': 'Finnish in Finland', 'GBR': 'British in England and Scotland',
+    'GIH': 'Gujarati Indian from Houston, Texas', 'GWD': 'Gambian in Western Divisions in the Gambia',
+    'IBS': 'Iberian Population in Spain', 'ITU': 'Indian Telugu from the UK', 'JPT': 'Japanese in Tokyo, Japan',
+    'KHV': 'Kinh in Ho Chi Minh City, Vietnam', 'LWK': 'Luhya in Webuye, Kenya', 'MSL': 'Mende in Sierra Leone',
+    'MXL': 'Mexican Ancestry from Los Angeles, USA', 'PEL': 'Peruvians from Lima, Peru',
+    'PJL': 'Punjabi in Lahore, Pakistan', 'PUR': 'Puerto Ricans from Puerto Rico',
+    'STU': 'Sri Lankan Tamil from the UK',
+    'TSI': 'Toscani in Italia (Tuscany, Italy)', 'YRI': 'Yoruba in Ibadan, Nigeria',
 }
 
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = os.path.join(APP_ROOT, 'uploads')
+SOURCE_DATA_FOLDER = os.path.join(APP_ROOT, 'source')
+ML_FOLDER = os.path.join(SOURCE_DATA_FOLDER, 'machine_learning')
 
-# --- Analiz Fonksiyonları (Öncekiyle aynı) ---
-
-def snp_veritabanini_ana_csvden_olustur(ana_csv_dosya_yolu):
-    master_liste = []
-    aranacak_db = defaultdict(set)
-    app.logger.info(f"Reading reference SNP list from main CSV: '{ana_csv_dosya_yolu}'")
-    try:
-        with open(ana_csv_dosya_yolu, 'r', encoding='utf-8') as f:
-            baslik_satiri = f.readline()
-            snp_sutunlari = baslik_satiri.strip().split(',')[1:]
-            master_liste = [snp.strip().strip("'\"") for snp in snp_sutunlari]
-            for snp in master_liste:
-                parcalar = snp.split(':')
-                if len(parcalar) == 4:
-                    kromozom, pozisyon, ref, alt = parcalar
-                    arama_anahtari = f"{kromozom.replace('chr', '')}:{pozisyon}"
-                    deger = f"{ref}:{alt}"
-                    aranacak_db[arama_anahtari].add(deger)
-        app.logger.info(f"Database created from main CSV header. {len(master_liste)} unique SNPs to search for.")
-        return master_liste, aranacak_db
-    except FileNotFoundError:
-        app.logger.error(f"ERROR: Main CSV file not found: {ana_csv_dosya_yolu}")
-        return None, None
-    except Exception as e:
-        app.logger.error(f"An error occurred while reading the main CSV header: {e}")
-        return None, None
+MODEL_PATH_APP = os.path.join(ML_FOLDER, 'random_forest_ethnicity_predictor.joblib')
+MODEL_COLUMNS_PATH_APP = os.path.join(ML_FOLDER, 'model_columns.joblib')
+SELECTED_SNPS_PATH_APP = os.path.join(ML_FOLDER, 'selected_snp_columns.joblib')
+SCALERS_PATH_APP = os.path.join(ML_FOLDER, 'scalers.joblib')
+PCAS_PATH_APP = os.path.join(ML_FOLDER, 'pcas.joblib')
 
 
 def genotip_kodunu_hesapla(genotip_str):
@@ -80,298 +51,159 @@ def genotip_kodunu_hesapla(genotip_str):
     return -1
 
 
-def vcf_dosyasindaki_genotipleri_bul(aranacak_snpler, vcf_yolu, master_snp_formatlari_global):
-    bulunan_genotipler = {}
-    app.logger.info(f"Scanning VCF file: '{vcf_yolu}'")
-    try:
-        vcf_opener = gzip.open if vcf_yolu.endswith('.gz') else open
-        with vcf_opener(vcf_yolu, 'rt', encoding='utf-8') as vcf_dosyasi:
-            for satir in vcf_dosyasi:
-                if satir.startswith('#'): continue
-                sutunlar = satir.strip().split('\t')
-                if len(sutunlar) < 10: continue
-                kromozom, pozisyon, _, ref, alt = sutunlar[0], sutunlar[1], sutunlar[2], sutunlar[3], sutunlar[4]
-                alt_aleller = alt.split(',')
-                arama_anahtari = f"{kromozom.replace('chr', '')}:{pozisyon}"
-                if arama_anahtari in aranacak_snpler:
-                    for tek_alt_alel in alt_aleller:
-                        vcf_deger = f"{ref}:{tek_alt_alel}"
-                        if vcf_deger in aranacak_snpler[arama_anahtari]:
+class AncestryPipeline:
+    def __init__(self, job_id, user_vcf_path):
+        self.job_id = job_id
+        self.user_vcf_path = user_vcf_path
+        self.work_dir = os.path.join(UPLOAD_FOLDER, self.job_id)
+        os.makedirs(self.work_dir, exist_ok=True)
+        self.sample_id = f'user_{self.job_id[:8]}'
+        self.min_snps_threshold = 800
+
+        self.selected_snp_list_raw = joblib.load(SELECTED_SNPS_PATH_APP)
+        self.selected_snp_list = [snp.strip("'\" ") for snp in self.selected_snp_list_raw]
+
+        self.snp_search_db = self._prepare_snp_database(self.selected_snp_list)
+        self.scalers = joblib.load(SCALERS_PATH_APP)
+        self.pcas = joblib.load(PCAS_PATH_APP)
+        self.model = joblib.load(MODEL_PATH_APP)
+        self.model_columns = joblib.load(MODEL_COLUMNS_PATH_APP)
+        self.snps_per_chunk = 7000
+        app.logger.info(f"AncestryPipeline nesnesi oluşturuldu ve tüm modeller yüklendi.")
+
+    def _prepare_snp_database(self, snp_list):
+        snp_db = defaultdict(set)
+        for snp in snp_list:
+            parts = snp.split(':')
+            if len(parts) == 4:
+                snp_db[f"{parts[0].replace('chr', '')}:{parts[1]}"].add(f"{parts[2]}:{parts[3]}")
+        return snp_db
+
+    def _process_vcf(self):
+        genotypes_dict = {}
+        found_snps_count = 0
+        opener = gzip.open if self.user_vcf_path.endswith('.gz') else open
+        with opener(self.user_vcf_path, 'rt', encoding='utf-8', errors='ignore') as vcf_file:
+            for line in vcf_file:
+                if line.startswith('#'): continue
+                cols = line.strip().split('\t')
+                if len(cols) < 10: continue
+                chrom, pos, _, ref, alt = cols[0], cols[1], cols[2], cols[3], cols[4]
+                search_key = f"{chrom.replace('chr', '')}:{pos}"
+                if search_key in self.snp_search_db:
+                    for alt_allele in alt.split(','):
+                        vcf_value = f"{ref}:{alt_allele}"
+                        if vcf_value in self.snp_search_db[search_key]:
                             try:
-                                format_alani = sutunlar[8].split(':')
-                                ornek_alani = sutunlar[9].split(':')
-                                gt_index = format_alani.index('GT')
-                                genotip_str = ornek_alani[gt_index]
-                                genotip_kodu = genotip_kodunu_hesapla(genotip_str)
-                                tam_snp_str = f"{kromozom.replace('chr', '')}:{pozisyon}:{ref}:{tek_alt_alel}"
-                                master_format_snp_str_chr = f"chr{kromozom.replace('chr', '')}:{pozisyon}:{ref}:{tek_alt_alel}"
-                                master_format_snp_str_no_chr = f"{kromozom.replace('chr', '')}:{pozisyon}:{ref}:{tek_alt_alel}"
-                                if master_format_snp_str_chr in master_snp_formatlari_global:
-                                    tam_snp_str = master_format_snp_str_chr
-                                elif master_format_snp_str_no_chr in master_snp_formatlari_global:
-                                    tam_snp_str = master_format_snp_str_no_chr
-                                bulunan_genotipler[tam_snp_str] = genotip_kodu
+                                gt_index = cols[8].split(':').index('GT')
+                                gt_str = cols[9].split(':')[gt_index]
+                                for master_snp in (s for s in self.selected_snp_list if
+                                                   search_key in s and vcf_value in s):
+                                    genotypes_dict[master_snp] = genotip_kodunu_hesapla(gt_str)
+                                    found_snps_count += 1
+                                    break
                                 break
                             except (ValueError, IndexError):
                                 continue
-    except FileNotFoundError:
-        app.logger.error(f"ERROR: VCF file not found: {vcf_yolu}")
-        return None
-    except Exception as e:
-        app.logger.error(f"An error occurred while processing VCF file: {e}", exc_info=True)
-        return None
-    app.logger.info(f"VCF scan complete. {len(bulunan_genotipler)} matching SNP genotypes found.")
-    return bulunan_genotipler
+        app.logger.info(f"VCF dosyasından toplam {found_snps_count} adet eşleşen SNP bulundu.")
+        return genotypes_dict, found_snps_count
 
 
-def sonuclari_ozel_formatta_yaz(master_liste, bulunan_genotipler, cikti_dosyasi):
-    app.logger.info(f"Writing results to custom format file: '{cikti_dosyasi}'")
-    genotip_kod_listesi = [str(bulunan_genotipler.get(snp, 0)) for snp in master_liste]
-    ikinci_satir = ",".join(genotip_kod_listesi)
-    try:
-        os.makedirs(os.path.dirname(cikti_dosyasi), exist_ok=True)
-        with open(cikti_dosyasi, 'w', encoding='utf-8') as f:
-            f.write(ikinci_satir)
-        app.logger.info(f"File created successfully with {len(genotip_kod_listesi)} genotype codes: {cikti_dosyasi}")
-    except Exception as e:
-        app.logger.error(f"An error occurred while writing the file: {e}")
+    def _transform_user_data(self, user_genotypes_dict):
+        app.logger.info("Kullanıcı verisi dönüştürülüyor...")
+        user_series = pd.Series(user_genotypes_dict).reindex(self.selected_snp_list, fill_value=0)#ÖNEMLİ
+        user_df = pd.DataFrame(user_series, columns=[self.sample_id]).T
+        all_user_pca_dfs = []
+        num_chunks = (len(self.selected_snp_list) + self.snps_per_chunk - 1) // self.snps_per_chunk
 
+        for i in range(num_chunks):
+            chunk_num = i + 1
+            app.logger.info(f"Transforming PCA chunk {chunk_num}/{num_chunks}...")
+            scaler = self.scalers[chunk_num]
+            pca = self.pcas[chunk_num]
+            start_col_idx = i * self.snps_per_chunk
+            end_col_idx = (i + 1) * self.snps_per_chunk
+            user_chunk = user_df.iloc[:, start_col_idx:end_col_idx]
+            if user_chunk.empty: continue
+            user_chunk_scaled = scaler.transform(user_chunk)
+            user_chunk_pca = pca.transform(user_chunk_scaled)
+            pc_columns = [f"PC{j + 1}_Chr{chunk_num}" for j in range(user_chunk_pca.shape[1])]
+            all_user_pca_dfs.append(pd.DataFrame(user_chunk_pca, columns=pc_columns, index=[self.sample_id]))
 
-def run_pca_on_input_data(genotype_input, data_source_name, n_components, output_filepath_base,
-                          imputation_strategy='mean'):
-    if isinstance(genotype_input, str):
-        try:
-            genotype_df = pd.read_csv(genotype_input, index_col=0)
-        except Exception as e:
-            app.logger.error(f"ERROR ({data_source_name}): Error loading genotype file: {e}")
-            return None
-    else:
-        genotype_df = genotype_input.copy()
+        if not all_user_pca_dfs: raise Exception("PCA dönüşümü başarısız oldu.")
 
-    X = genotype_df.values
-    sample_ids = genotype_df.index
-    imputer = SimpleImputer(missing_values=np.nan, strategy=imputation_strategy)
-    X_imputed = imputer.fit_transform(X)
-    if np.any(X_imputed == -1):
-        X_imputed[X_imputed == -1] = np.nan
-        imputer_for_minus_one = SimpleImputer(missing_values=np.nan, strategy=imputation_strategy)
-        X_imputed = imputer_for_minus_one.fit_transform(X_imputed)
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_imputed)
-    actual_n_components = min(n_components, X_scaled.shape[0], X_scaled.shape[1])
-    pca = PCA(n_components=actual_n_components)
-    principal_components = pca.fit_transform(X_scaled)
-    pc_columns = [f'PC{i + 1}' for i in range(actual_n_components)]
-    return pd.DataFrame(data=principal_components, columns=pc_columns, index=sample_ids)
+        final_user_pca_df = pd.concat(all_user_pca_dfs, axis=1)
+        return final_user_pca_df
 
-
-def extract_and_save_sample_features(input_path, output_path, sample_id, id_column):
-    try:
-        full_pca_df = pd.read_csv(input_path)
-        sample_row_df = full_pca_df[full_pca_df[id_column] == sample_id]
-        if sample_row_df.empty: return False
-        features_only_df = sample_row_df.drop(columns=[id_column])
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        features_only_df.to_csv(output_path, index=False, header=True)
-        return True
-    except Exception as e:
-        app.logger.error(f"Error extracting features for {sample_id}: {e}")
-        return False
-
-
-def load_features_and_model(features_path, model_path_val):
-    try:
-        features_df = pd.read_csv(features_path)
-        if features_df.empty: return None, None
-        ml_model = joblib.load(model_path_val)
-        return features_df, ml_model
-    except Exception as e:
-        app.logger.error(f"Error loading features or model: {e}")
-        return None, None
-
-
-def get_target_column_names(y_path):
-    if y_path and os.path.exists(y_path):
-        try:
-            y_df = pd.read_csv(y_path)
-            # Eğer y_processed.csv'de ilk sütun 'SampleID' gibi bir şeyse ve model onsuz eğitildiyse,
-            # bu sütunu atmak için y_df.columns[1:].tolist() kullanabilirsiniz.
-            # Şimdilik tüm sütunları aldığını varsayıyoruz.
-            return y_df.columns.tolist()
-        except Exception as e:
-            app.logger.warning(f"WARNING: Could not read column names from {os.path.basename(y_path)}: {e}.")
-    return None
-
-
-def make_prediction_and_get_results(model, features, target_sample_id, target_names=None):
-    prediction = model.predict(features)
-    raw_predictions = prediction[0]
-    positive_predictions = [max(0, val) for val in raw_predictions]
-    sum_of_positives = sum(positive_predictions)
-    normalized_percentages = []
-    if sum_of_positives > 0:
-        normalized_percentages = [(val / sum_of_positives) * 100 for val in positive_predictions]
-    else:
-        normalized_percentages = [0.0] * len(raw_predictions)
-
-    results_data = {"sample_id": target_sample_id, "labels": [], "percentages": [], "display_predictions": [],
-                    "dominant_ancestry": "N/A", "dominant_percentage_str": "N/A", "error_message": None}
-
-    # target_names burada kısa kodları değil, tam adları içerecek
-    if target_names and len(target_names) == len(normalized_percentages):
-        results_data["labels"] = target_names
-        results_data["percentages"] = normalized_percentages
-        results_df = pd.DataFrame({'category': target_names, 'percentage': normalized_percentages}).sort_values(
+    def _make_prediction(self, features_df):
+        app.logger.info("Tahmin yapılıyor...")
+        features_reordered = features_df.reindex(columns=self.model_columns, fill_value=0)
+        probabilities = self.model.predict_proba(features_reordered)[0]
+        class_names = self.model.classes_
+        full_target_names = [POPULATION_MAP.get(code, code) for code in class_names]
+        percentages = [p * 100 for p in probabilities]
+        results_data = {"sample_id": self.sample_id, "labels": full_target_names, "percentages": percentages,
+                        "display_predictions": []}
+        results_df = pd.DataFrame({'category': full_target_names, 'percentage': percentages}).sort_values(
             by='percentage', ascending=False)
-        for index, row in results_df.iterrows():
-            results_data["display_predictions"].append(
-                {"category": row['category'], "percentage_str": f"{row['percentage']:.2f}%"})
-        if not results_df.empty and results_df.iloc[0]['percentage'] > 0:
-            dominant_row = results_df.iloc[0]
-            results_data["dominant_ancestry"] = dominant_row['category']
-            results_data["dominant_percentage_str"] = f"{dominant_row['percentage']:.2f}%"
-        else:
-            results_data["dominant_ancestry"] = "No dominant ancestry could be determined."
-    else:
-        results_data["error_message"] = "Target names do not match prediction count or are unavailable."
-        results_data["labels"] = [f"Population {i + 1}" for i in range(len(normalized_percentages))]
-        results_data["percentages"] = normalized_percentages
-        for i, val in enumerate(normalized_percentages):
-            results_data["display_predictions"].append(
-                {"category": f"Population {i + 1}", "percentage_str": f"{val:.2f}%"})
+        for _, row in results_df.iterrows():
+            if row['percentage'] > 0.01:
+                results_data["display_predictions"].append(
+                    {"category": row['category'], "percentage_str": f"{row['percentage']:.2f}%"})
+        dominant_row = results_df.iloc[0]
+        results_data["dominant_ancestry"] = dominant_row['category']
+        results_data["dominant_percentage_str"] = f"{dominant_row['percentage']:.2f}%"
+        return results_data
 
-    return results_data
+    def cleanup(self):
+        if os.path.exists(self.work_dir): shutil.rmtree(self.work_dir)
+
+    def run(self):
+        user_genotypes_dict, snp_match_count = self._process_vcf()
+        if snp_match_count < self.min_snps_threshold:
+            raise Exception(
+                f"Analiz durduruldu: Yetersiz genetik veri. Modelin bildiği {len(self.selected_snp_list)} belirteçten sadece {snp_match_count} tanesi bulundu. Lütfen dosyanızın GRCh37 olduğundan emin olun.")
+
+        features_df = self._transform_user_data(user_genotypes_dict)
+        prediction = self._make_prediction(features_df)
+        app.logger.info("Analiz tamamlandı.")
+        return prediction
 
 
-# --- Flask Uygulaması ---
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
-
-# --- Uygulama Ayarları ve Dosya Yolları ---
-APP_ROOT = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(APP_ROOT, 'uploads')
-SOURCE_DATA_FOLDER = os.path.join(APP_ROOT, 'source')
-APP_RESULTS_FOLDER = os.path.join(APP_ROOT, 'results_app')
-ANA_CSV_DOSYASI_REFERANS = os.path.join(SOURCE_DATA_FOLDER, 'filtrelenmis_genotip_TUM_KROMOZOM_top7000_snps.csv')
-MODEL_PATH_APP = os.path.join(SOURCE_DATA_FOLDER, 'machine_learning', 'optimized_ethnicity_predictor.joblib')
-Y_COLUMN_NAMES_PATH_APP = os.path.join(SOURCE_DATA_FOLDER, 'y_processed.csv')
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(APP_RESULTS_FOLDER, exist_ok=True)
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
-app.logger.setLevel(logging.INFO)
 
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        if 'vcf_file' not in request.files or request.files['vcf_file'].filename == '':
+        if 'vcf_file' not in request.files or not request.files['vcf_file'].filename:
             flash('Please select a file.', 'danger')
             return redirect(request.url)
         file = request.files['vcf_file']
         if file and (file.filename.endswith('.vcf') or file.filename.endswith('.vcf.gz')):
-            session_id = str(uuid.uuid4())
-            session_work_dir = os.path.join(UPLOAD_FOLDER, session_id)
-            os.makedirs(session_work_dir, exist_ok=True)
-            user_vcf_path = os.path.join(session_work_dir, file.filename)
-            file.save(user_vcf_path)
-            app.logger.info(f"File '{file.filename}' uploaded. Processing ID: {session_id}")
-
+            pipeline = None
             try:
-                # Dinamik Dosya Yolları
-                CIKTI_GENOTIP_TXT_DOSYASI = os.path.join(session_work_dir, 'genotip_sonuclari.txt')
-                YENI_BIREY_KIMLIGI = f'user_{session_id[:8]}'
-                BIRLESTIRILMIS_SNP_VERILERI_CSV = os.path.join(session_work_dir, 'birlestirilmis_snp_verileri.csv')
-                SESSION_RESULTS_DIR = os.path.join(APP_RESULTS_FOLDER, session_id)
-                os.makedirs(SESSION_RESULTS_DIR, exist_ok=True)
-                FINAL_COMBINED_PCA_FILEPATH = os.path.join(SESSION_RESULTS_DIR,
-                                                           f"pca_combined_{YENI_BIREY_KIMLIGI}.csv")
-                EXTRACTED_FEATURES_FILEPATH = os.path.join(SESSION_RESULTS_DIR, f"features_{YENI_BIREY_KIMLIGI}.csv")
-                PCA_SAMPLE_ID_COLUMN_NAME = "SampleID"
-
-                # Adım 1: VCF İşleme
-                master_liste_snps, aranacak_db_snps = snp_veritabanini_ana_csvden_olustur(ANA_CSV_DOSYASI_REFERANS)
-                if not master_liste_snps: raise Exception("Could not create the main reference SNP list.")
-                current_run_master_snp_formats = set(master_liste_snps)
-                vcf_sonuclari = vcf_dosyasindaki_genotipleri_bul(aranacak_db_snps, user_vcf_path,
-                                                                 current_run_master_snp_formats)
-                if vcf_sonuclari is None: raise Exception("Could not read genotypes from VCF file.")
-                sonuclari_ozel_formatta_yaz(master_liste_snps, vcf_sonuclari, CIKTI_GENOTIP_TXT_DOSYASI)
-
-                # Adım 2: Veri Birleştirme
-                with open(CIKTI_GENOTIP_TXT_DOSYASI, 'r') as f:
-                    genotip_verileri_str = f.read().strip()
-                yeni_satir_verisi = f"{YENI_BIREY_KIMLIGI},{genotip_verileri_str}\n"
-                shutil.copy(ANA_CSV_DOSYASI_REFERANS, BIRLESTIRILMIS_SNP_VERILERI_CSV)
-                with open(BIRLESTIRILMIS_SNP_VERILERI_CSV, 'a', encoding='utf-8') as f:
-                    f.write(yeni_satir_verisi)
-
-                # Adım 3: PCA Analizi
-                master_genotype_df = pd.read_csv(BIRLESTIRILMIS_SNP_VERILERI_CSV, index_col=0)
-                all_chromosome_pca_dfs_renamed = []
-                total_snps = master_genotype_df.shape[1]
-                snps_per_chunk = 7000
-                n_pca_components = 20
-                num_chunks = (total_snps + snps_per_chunk - 1) // snps_per_chunk
-                for i in range(num_chunks):
-                    start_col = i * snps_per_chunk
-                    end_col = start_col + snps_per_chunk
-                    chunk_df = master_genotype_df.iloc[:, start_col:end_col]
-                    if chunk_df.empty: continue
-                    pca_scores = run_pca_on_input_data(chunk_df, f"Chunk{i + 1}", n_pca_components, None)
-                    if pca_scores is not None:
-                        renamed_cols = {col: f"{col}_Chunk{i + 1}" for col in pca_scores.columns}
-                        all_chromosome_pca_dfs_renamed.append(pca_scores.rename(columns=renamed_cols))
-
-                final_combined_pca_scores_df = pd.concat(all_chromosome_pca_dfs_renamed, axis=1)
-                final_output_df = final_combined_pca_scores_df.reset_index().rename(
-                    columns={'index': PCA_SAMPLE_ID_COLUMN_NAME})
-                final_output_df.to_csv(FINAL_COMBINED_PCA_FILEPATH, index=False)
-
-                # Adım 4: Özellik Çıkarma
-                if not extract_and_save_sample_features(FINAL_COMBINED_PCA_FILEPATH, EXTRACTED_FEATURES_FILEPATH,
-                                                        YENI_BIREY_KIMLIGI, PCA_SAMPLE_ID_COLUMN_NAME):
-                    raise Exception("Could not extract PCA features for the user sample.")
-
-                # Adım 5: Tahmin
-                features, model = load_features_and_model(EXTRACTED_FEATURES_FILEPATH, MODEL_PATH_APP)
-                if features is None or model is None:
-                    raise Exception("Could not load features or model for prediction.")
-
-                # --- YENİ EKLENEN KISIM: KISA KODLARI TAM İSİMLERE ÇEVİRME ---
-                target_name_codes = get_target_column_names(Y_COLUMN_NAMES_PATH_APP)
-                target_names_full = None
-                if target_name_codes:
-                    # .get(code, code) kullanılırsa, sözlükte bulunamayan kod kendisi olarak kalır.
-                    target_names_full = [POPULATION_MAP.get(code, code) for code in target_name_codes]
-                # --- ÇEVİRME İŞLEMİ SONU ---
-
-                warnings.filterwarnings("ignore", category=UserWarning, module="lightgbm")
-
-                # Tahmin fonksiyonuna tam isimleri (target_names_full) gönder
-                prediction_results = make_prediction_and_get_results(model, features, YENI_BIREY_KIMLIGI,
-                                                                     target_names_full)
-
+                job_id = str(uuid.uuid4())
+                work_dir = os.path.join(UPLOAD_FOLDER, job_id)
+                os.makedirs(work_dir, exist_ok=True)
+                user_vcf_path = os.path.join(work_dir, file.filename)
+                file.save(user_vcf_path)
+                pipeline = AncestryPipeline(job_id=job_id, user_vcf_path=user_vcf_path)
+                prediction_results = pipeline.run()
                 return render_template('results.html', results=prediction_results)
-
             except Exception as e:
-                app.logger.error(f"An error occurred during processing (ID: {session_id}): {e}", exc_info=True)
-                flash(f'An unexpected error occurred during processing: {e}', "danger")
+                app.logger.error(f"An error occurred during processing: {e}", exc_info=True)
+                flash(f'{e}', "danger")
                 return redirect(url_for('index'))
             finally:
-                # Geçici dosyaları temizle
-                try:
-                    if os.path.exists(session_work_dir): shutil.rmtree(session_work_dir)
-                    if 'SESSION_RESULTS_DIR' in locals() and os.path.exists(SESSION_RESULTS_DIR): shutil.rmtree(
-                        SESSION_RESULTS_DIR)
-                    app.logger.info(f"Temporary files cleaned up for ID: {session_id}")
-                except Exception as e_clean:
-                    app.logger.error(f"Error during temporary file cleanup: {e_clean}")
+                if pipeline:
+                    pipeline.cleanup()
         else:
             flash('Invalid file type. Please upload a .vcf or .vcf.gz file.', 'warning')
             return redirect(request.url)
-
     return render_template('index.html')
 
 
